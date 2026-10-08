@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Deno Map 4K
+## Notes: The world map of every Forever zone in four times the resolution, discovered areas included. Upscaled from Forever's own map art.
+## Author: Deniz
+## Version: 1.0.0
+## Category: Map
+
+Manifest.lua
+Core.lua

@@ -1,0 +1,27 @@
+# Editor / OS noise
+desktop.ini
+Thumbs.db
+*~
+
+# Working backups made while patching
+*.bak
+*.bak_*
+*_backup_*
+
+# Large or third-party media that must not be redistributed
+*.mp3
+*.ogg
+*.wav
+*.zip
+*.mpq
+Music/
+
+# The 4K textures ship in the release zip, not in git (1.4 GB)
+Maps/
+
+# Build leftovers
+tools/raw/
+tools/db2/
+tools/models/
+tools/jobs.json
+__pycache__/

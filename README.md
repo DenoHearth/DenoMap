@@ -10,7 +10,7 @@ A World of Warcraft: Forever addon (interface 16001).
 
 The world map of World of Warcraft: Forever in four times the resolution: 4008 x 2672
 instead of 1002 x 668. Every zone, city, continent and battleground map the game has,
-57 maps in all, with the discovered areas that are drawn over them.
+57 maps in all, with the discovered areas that are drawn over them. Plus deeper zoom and a sharper minimap.
 
 - **Forever's own maps.** Forever redrew every zone map and added new zones (Mount Hyjal,
   Zephras Isle, Riverglades, Shen'dralas, Darkspear Islands). The textures here are upscaled
@@ -19,24 +19,28 @@ instead of 1002 x 668. Every zone, city, continent and battleground map the game
   with the same model and line up with the map underneath.
 - **Nothing replaced.** The game's map frames are only hooked. A map or texture the pack
   does not know keeps Blizzard's art, so a map can never go blank.
-- **No settings.** Install it and open the map.
+- **Zoom further.** The mouse wheel zooms the map up to five times its size (the game
+  stops at about two), and holding the left button drags it around while zoomed in.
+- **Sharper minimap.** Outdoors in Eastern Kingdoms, Kalimdor and Zephras Isle the minimap
+  terrain is drawn from tiles upscaled to twice the resolution, which shows when the minimap
+  is zoomed in. Dots, arrows and tracking are still the game's own. Indoors, in instances
+  and with the rotating minimap switched on, the game's own minimap is shown unchanged.
 - **Standalone.** No libraries, no dependencies.
-
-The minimap is not changed: the game draws it itself from world files an addon cannot
-reach.
 
 ## Install
 
 - **By hand:** download the zip from the
   [latest release](https://github.com/DenoHearth/DenoMap/releases/latest) and extract
   the `DenoMap` folder into `World of Warcraft\<Forever folder>\Interface\AddOns\`.
-  Restart the game. The download is large: it holds 1,656 textures.
+  Restart the game. The download is large: it holds about 3,450 textures.
 - This repository holds the code and the build scripts only. The textures are in the
   release zip, not in git.
 
 ## Commands
 
-- `/denomap` - how many textures of the map you last opened are shown in 4K
+- `/denomap` - how many textures of the map you last opened are shown in 4K, and what the
+  minimap is doing
+- `/denomap minimap` - switch the sharper minimap on or off
 
 ## How it works
 
@@ -57,6 +61,9 @@ of file ids. After a game patch that changes a map, run the three again.
 - `Core.lua` - the hooks and the texture swap
 - `Manifest.lua` - generated: the file ids that have an upscale
 - `Maps\` - the textures (release zip only)
+- `Zoom.lua` - the extra zoom steps
+- `Minimap.lua` - the sharper minimap; `MinimapManifest.lua` - generated: its tiles
+- `Minimap\` - the minimap tiles (release zip only)
 
 ## Limits and credits
 

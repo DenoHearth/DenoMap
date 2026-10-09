@@ -7,7 +7,8 @@
 --
 -- Nothing of Blizzard's is replaced: the map frames are only hooked.
 --
---   /denomap   how many textures of the open map are in 4K
+--   /denomap           how many textures of the open map are in 4K, and what the minimap is doing
+--   /denomap minimap   switch the sharper minimap on or off (Minimap.lua)
 
 local ADDON, ns = ...
 
@@ -63,6 +64,7 @@ frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("ADDON_LOADED")
 frame:SetScript("OnEvent", function(_, event, name)
     if event == "PLAYER_LOGIN" then
+        ns.AttachZoom(WorldMapFrame)
         attach(WorldMapFrame)
         attach(BattlefieldMapFrame)
     elseif name == "Blizzard_BattlefieldMap" or name == "Blizzard_WorldMap" then
@@ -72,9 +74,11 @@ frame:SetScript("OnEvent", function(_, event, name)
 end)
 
 SLASH_DENOMAP1 = "/denomap"
-SlashCmdList.DENOMAP = function()
+SlashCmdList.DENOMAP = function(msg)
+    if strtrim(msg or ""):lower() == "minimap" then return ns.ToggleMinimap() end
     local count = 0
     for _ in pairs(HD) do count = count + 1 end
     print(string.format("|cffffcc66Deno Map 4K|r: %d textures in the pack. Last map drawn: %d of %d tiles and %d discovered areas in 4K.",
         count, last.tiles, last.seen, last.overlays))
+    print("|cffffcc66Deno Map 4K|r: sharper minimap " .. ns.MinimapStatus() .. ". /denomap minimap switches it.")
 end

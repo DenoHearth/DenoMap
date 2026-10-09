@@ -25,3 +25,5 @@ tools/db2/
 tools/models/
 tools/jobs.json
 __pycache__/
+Minimap/
+tools/mjobs.json

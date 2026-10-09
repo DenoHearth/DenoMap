@@ -3,7 +3,7 @@ import json, os, struct, numpy as np, torch
 from PIL import Image
 import etcpak
 
-JOBS = json.load(open('jobs.json'))
+JOBS = json.load(open('jobs.json')) if os.path.exists('jobs.json') else None
 def tile(fid): return Image.open(f'raw/{fid}.blp').convert('RGBA')
 
 def stitch(tiles):

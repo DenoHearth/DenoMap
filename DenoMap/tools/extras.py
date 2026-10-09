@@ -3,7 +3,7 @@ the mouse is over a zone on a continent map. Same 4x upscale, written to Maps/<f
 import csv, json, os, sys, time, urllib.request, numpy as np
 from PIL import Image
 from up import upscale_rgb, bleed, write_blp
-BUILD = '1.60.1.70235'
+BUILD = '1.60.1.70291'
 MODEL = 'models/RealESRGAN_x4plus.pth'
 OUT = '../Maps'
 DB2 = 'db2/'            # the tables jobs.py fetched

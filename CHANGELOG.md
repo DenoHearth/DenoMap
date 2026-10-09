@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.1 — 2026-10-09
+
+- Remade for game build 1.60.1.70291: the patch redrew part of the minimap; 485 minimap tiles and 4 world map textures are new
+- `tools/rebuild_check.py` and `tools/keep_same.py`: after a game patch, find the textures whose source changed and redo only those
+
 ## v1.2.0 — 2026-10-09
 
 - The minimap in full 4K: tiles are now four times the game's resolution (2048 pixels a tile), not two

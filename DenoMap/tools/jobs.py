@@ -3,7 +3,7 @@
 Build jobs.json (every map art Forever shows, its tiles and discovery overlays) and
 download the source textures from wago.tools into raw/<fileDataID>.blp."""
 import csv, json, os, sys, time, urllib.request, concurrent.futures as cf
-BUILD = '1.60.1.70235'
+BUILD = '1.60.1.70291'
 def T(n):
     """One game table as rows; fetched once from wago.tools into db2/."""
     p = f'db2/{n}.csv'

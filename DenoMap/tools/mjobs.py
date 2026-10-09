@@ -1,7 +1,9 @@
 """Read each world map's WDT (MAID chunk) for its minimap tile file ids; download the tiles."""
 import json, os, struct, sys, time, urllib.request, concurrent.futures as cf
 BUILD = '1.60.1.70235'
-MAPS = {0: 775971, 1: 782779, 2991: 7198644}      # map id -> WDT file id (Map.db2)
+# map id -> WDT file id (Map.db2): Eastern Kingdoms, Kalimdor, Zephras Isle, Alterac Valley,
+# Warsong Gulch, Arathi Basin, Darkspear Islands
+MAPS = {0: 775971, 1: 782779, 2991: 7198644, 30: 790112, 489: 790291, 529: 790377, 2997: 7251908}
 def get(fid, path, magic=None):
     if os.path.exists(path) and os.path.getsize(path) > 16: return 0
     for attempt in range(4):

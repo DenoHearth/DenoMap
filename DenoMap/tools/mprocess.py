@@ -1,6 +1,6 @@
-"""Upscale every minimap tile 2x (4x model, halved) and write Minimap/<map>/<col>_<row>.blp.
+"""Upscale every minimap tile 4x (512 -> 2048) and write Minimap/<map>/<col>_<row>.blp.
 Empty ocean tiles are written small: they carry no detail."""
-import json, os, sys, time, numpy as np
+import json, os, struct, sys, time, numpy as np
 from PIL import Image
 from up import upscale_rgb, write_blp
 MODEL = 'models/RealESRGAN_x4plus.pth'
@@ -17,7 +17,9 @@ for m, tiles in J.items():
     for key in tiles:
         if only and f'{m}:{key}' not in only: continue
         out = f'{OUT}/{m}/{key}.blp'
-        if os.path.exists(out): continue
+        if os.path.exists(out):
+            w = struct.unpack('<I', open(out, 'rb').read(16)[12:16])[0]
+            if w in (64, 2048): continue          # done at the current size
         c, r = map(int, key.split('_'))
         me = load(m, c, r); a = np.asarray(me)
         if a.astype(np.int16).std() < 6:
@@ -33,8 +35,8 @@ for m, tiles in J.items():
                     if nb: big.paste(nb, (PAD + dc * 512, PAD + dr * 512))
             up = upscale_rgb(np.asarray(big), MODEL, tile_px=640, pad=0)
             up = up[PAD * 4:PAD * 4 + 2048, PAD * 4:PAD * 4 + 2048]
-            half = np.asarray(Image.fromarray(up).resize((1024, 1024), Image.LANCZOS).convert('RGBA'))
-            write_blp(out, np.ascontiguousarray(half), False)
+            full = np.dstack([up, np.full(up.shape[:2], 255, np.uint8)])
+            write_blp(out, np.ascontiguousarray(full), False)
         n += 1
         if n % 50 == 0: print(n, round(time.time() - t0), 's', flush=True)
 print('DONE', n, flush=True)

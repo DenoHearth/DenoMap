@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 — 2026-10-09
+
+- The minimap in full 4K: tiles are now four times the game's resolution (2048 pixels a tile), not two
+- Minimap also in Alterac Valley, Warsong Gulch, Arathi Basin and on Darkspear Islands; it now turns with the rotating minimap instead of standing by
+- Zone highlights (the glow over a zone on a continent map) and the flight master's maps in 4K
+- `/denomap selftest`: writes what the addon measured to its saved variables and takes two screenshots
+- The whole addon, textures included, is now in the repository as one bundle; the addon sits in its own `DenoMap` folder
+
 ## v1.1.0 — 2026-10-09
 
 - Zoom further into the world map: four more steps, up to five times its size; the mouse wheel zooms towards the pointer and holding the left button drags the map while zoomed in

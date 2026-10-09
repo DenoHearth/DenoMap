@@ -1,0 +1,7 @@
+*.blp binary
+*.jpg binary
+*.png binary
+*.lua text eol=lf
+*.toc text eol=lf
+*.py text eol=lf
+*.md text eol=lf

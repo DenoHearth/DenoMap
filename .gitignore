@@ -2,28 +2,16 @@
 desktop.ini
 Thumbs.db
 *~
+__pycache__/
 
-# Working backups made while patching
+# Working backups
 *.bak
 *.bak_*
 *_backup_*
 
-# Large or third-party media that must not be redistributed
-*.mp3
-*.ogg
-*.wav
-*.zip
-*.mpq
-Music/
-
-# The 4K textures ship in the release zip, not in git (1.4 GB)
-Maps/
-
-# Build leftovers
-tools/raw/
-tools/db2/
-tools/models/
-tools/jobs.json
-__pycache__/
-Minimap/
-tools/mjobs.json
+# Build leftovers (downloads, models, job lists)
+DenoMap/tools/raw/
+DenoMap/tools/db2/
+DenoMap/tools/models/
+DenoMap/tools/jobs.json
+DenoMap/tools/mjobs.json

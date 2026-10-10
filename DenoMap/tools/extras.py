@@ -2,11 +2,12 @@
 the mouse is over a zone on a continent map. Same 4x upscale, written to Maps/<file id>.blp."""
 import csv, json, os, sys, time, urllib.request, numpy as np
 from PIL import Image
-from up import upscale_rgb, bleed, write_blp
+from up import upscale_rgb, bleed, write_blp, with_grain
+FORCE = '--force' in sys.argv
 BUILD = '1.60.1.70291'
-MODEL = 'models/RealESRGAN_x4plus.pth'
-OUT = '../Maps'
-DB2 = 'db2/'            # the tables jobs.py fetched
+MODEL = '../models/RealESRGAN_x4plus.pth'
+OUT = 'C:/Dev/wow-forever-addons/DenoMap/Maps'
+DB2 = 'C:/Users/Deniz/.claude/skills/foreverman/tools/db2cache/' + BUILD + '/'
 def T(n): return list(csv.DictReader(open(DB2 + n + '.csv', encoding='utf-8-sig')))
 live = set(json.load(open('jobs.json')))
 art = T('UiMapArt'); style = {a['ID']: a['UiMapArtStyleID'] for a in art}
@@ -24,13 +25,14 @@ for f in sorted(fids):
     im = Image.open(p).convert('RGBA'); a = np.asarray(im)
     alpha = a[..., 3].min() < 250
     out = f'{OUT}/{f}.blp'
-    if os.path.exists(out): continue
+    if os.path.exists(out) and not FORCE: continue
     if alpha:
-        rgb = upscale_rgb(bleed(a), MODEL)
+        filled = bleed(a)
+        rgb = with_grain(upscale_rgb(filled, MODEL), filled)
         al = np.asarray(Image.fromarray(a[..., 3]).resize((im.width * 4, im.height * 4), Image.BICUBIC))
         big = np.dstack([rgb, al])
     else:
-        rgb = upscale_rgb(np.ascontiguousarray(a[..., :3]), MODEL)
+        rgb = with_grain(upscale_rgb(np.ascontiguousarray(a[..., :3]), MODEL), a)
         big = np.dstack([rgb, np.full(rgb.shape[:2], 255, np.uint8)])
     write_blp(out, np.ascontiguousarray(big), alpha)
     print(f, im.size, 'alpha' if alpha else 'opaque', flush=True)

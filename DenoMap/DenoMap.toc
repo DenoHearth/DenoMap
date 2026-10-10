@@ -2,7 +2,7 @@
 ## Title: Deno Map 4K
 ## Notes: The world map of every Forever zone in four times the resolution, discovered areas, zone highlights and flight maps included, deeper zoom, and the minimap in 4K too. Upscaled from Forever's own art.
 ## Author: Deniz
-## Version: 1.2.1
+## Version: 1.3.0
 ## Category: Map
 ## SavedVariables: DenoMapDB
 

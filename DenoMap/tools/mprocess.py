@@ -2,22 +2,24 @@
 Empty ocean tiles are written small: they carry no detail."""
 import json, os, struct, sys, time, numpy as np
 from PIL import Image
-from up import upscale_rgb, write_blp
-MODEL = 'models/RealESRGAN_x4plus.pth'
-OUT = '../Minimap'
+from up import upscale_rgb, write_blp, with_grain
+MODEL = '../models/RealESRGAN_x4plus.pth'
+OUT = 'C:/Dev/wow-forever-addons/DenoMap/Minimap'
 J = json.load(open('mjobs.json'))
 PAD = 32
 def load(m, c, r):
     f = J[m].get(f'{c}_{r}')
     return Image.open(f'raw/{f}.blp').convert('RGB') if f else None
-only = sys.argv[1:]
+FORCE = "--force" in sys.argv
+GRAIN = 1.0
+only = [a for a in sys.argv[1:] if not a.startswith("--")]
 t0 = time.time(); n = 0
 for m, tiles in J.items():
     os.makedirs(f'{OUT}/{m}', exist_ok=True)
     for key in tiles:
         if only and f'{m}:{key}' not in only: continue
         out = f'{OUT}/{m}/{key}.blp'
-        if os.path.exists(out):
+        if os.path.exists(out) and not FORCE:
             w = struct.unpack('<I', open(out, 'rb').read(16)[12:16])[0]
             if w in (64, 2048): continue          # done at the current size
         c, r = map(int, key.split('_'))
@@ -34,6 +36,7 @@ for m, tiles in J.items():
                     nb = me if (dc, dr) == (0, 0) else load(m, c + dc, r + dr)
                     if nb: big.paste(nb, (PAD + dc * 512, PAD + dr * 512))
             up = upscale_rgb(np.asarray(big), MODEL, tile_px=640, pad=0)
+            up = with_grain(up, np.asarray(big), GRAIN)      # the source texture back on top
             up = up[PAD * 4:PAD * 4 + 2048, PAD * 4:PAD * 4 + 2048]
             full = np.dstack([up, np.full(up.shape[:2], 255, np.uint8)])
             write_blp(out, np.ascontiguousarray(full), False)

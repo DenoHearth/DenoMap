@@ -2,8 +2,8 @@
 import os, sys, time, numpy as np
 from PIL import Image
 from up import *
-MODEL = 'models/RealESRGAN_x4plus.pth'   # from github.com/xinntao/Real-ESRGAN releases
-OUT = '../Maps'
+MODEL = '../models/RealESRGAN_x4plus.pth'
+OUT = 'C:/Dev/wow-forever-addons/DenoMap/Maps'
 os.makedirs(OUT, exist_ok=True)
 S = 4
 
@@ -22,15 +22,18 @@ def emit(big, tiles, w, h, alpha):
         if ph or pw: piece = np.pad(piece, ((0, ph), (0, pw), (0, 0)), mode='edge')
         write_blp(f'{OUT}/{fid}.blp', np.ascontiguousarray(piece), alpha)
 
-def done(tiles): return all(os.path.exists(f'{OUT}/{f}.blp') for _, _, f in tiles)
+FORCE = '--force' in sys.argv
+SINCE = os.path.getmtime('process.py.pre-grain')      # --force: redo what is older than the grain change
+def fresh(p): return os.path.exists(p) and (not FORCE or os.path.getmtime(p) > SINCE)
+def done(tiles): return not tiles or all(fresh(f'{OUT}/{f}.blp') for _, _, f in tiles)
 
-only = sys.argv[1:]
+only = [a for a in sys.argv[1:] if not a.startswith('--')]
 t0 = time.time(); n = 0
 for art, a in JOBS.items():
     if only and art not in only: continue
     if not done(a['tiles']):
         src = np.asarray(stitch(a['tiles']).convert('RGB'))
-        up = upscale_rgb(src, MODEL)
+        up = with_grain(upscale_rgb(src, MODEL), src)      # the source texture back on top
         big = np.dstack([up, np.full(up.shape[:2], 255, np.uint8)])
         emit(big, a['tiles'], src.shape[1], src.shape[0], False)
     for oid, o in a['overlays'].items():
@@ -38,7 +41,8 @@ for art, a in JOBS.items():
         full = np.asarray(stitch(o['tiles']))
         h, w = min(o['h'], full.shape[0]), min(o['w'], full.shape[1])
         src = np.ascontiguousarray(full[:h, :w])
-        rgb = upscale_rgb(bleed(src), MODEL)
+        filled = bleed(src)
+        rgb = with_grain(upscale_rgb(filled, MODEL), filled)
         al = np.asarray(Image.fromarray(src[..., 3]).resize((w * S, h * S), Image.BICUBIC))
         emit(np.dstack([rgb, al]), o['tiles'], w, h, True)
     n += 1

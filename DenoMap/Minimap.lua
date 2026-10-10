@@ -21,8 +21,24 @@ local BASE = "Interface\\AddOns\\" .. ADDON .. "\\Minimap\\"
 local MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local have = ns.minimapTiles or {}   -- [world map id] = { ["column_row"] = true }, from Minimap\<id>\Tiles.lua
 
+-- Three copies of every tile (tools/ladder.py): 512 px in q, 1024 px in h, 2048 px beside them.
+-- The copy that fits the size a tile has on screen is shown, read with the LINEAR filter.
+-- Measured in game 2026-10-10: the 2048 px copy alone with TRILINEAR had a quarter of the fine
+-- detail of the game's own minimap at normal zoom, because that filter mixes in copies smaller
+-- than the screen; with a fitting copy and LINEAR it has more than the game's.
+local COPY = { "q\\", "h\\", "" }
+local COPY_PIXELS = { 512, 1024 }
+-- The game draws its minimap terrain darker than the tile files are, and darker at night than
+-- by day. Measured in game on 2026-10-10 at 19 hours of the game clock (tools/tonecurve.py):
+-- 0.77 of the file from 21:40 to 04:10, 0.88 from 05:20 to 20:35, a ramp in between.
+-- The tiles are tinted the same, so the map keeps the game's own look at every hour.
+local NIGHT, DAY = 0.772, 0.878
+local DAWN_FROM, DAWN_TO, DUSK_FROM, DUSK_TO = 4 * 60 + 10, 5 * 60 + 20, 20 * 60 + 35, 21 * 60 + 40
+local shownTone
+
 local frame, slots
 local active = false
+local shownCopy
 
 -- The measured link between a zone map and the world, redone on every zone change and
 -- never assumed: where the map's corner is, and which way east and south run, in the
@@ -93,8 +109,21 @@ local function position()
     return cal.originA + px * cal.eastA + py * cal.southA, cal.originB + px * cal.eastB + py * cal.southB
 end
 
+local function tone()
+    local hours, minutes = GetGameTime()
+    if hidden(hours) or hidden(minutes) then return DAY end
+    local now = hours * 60 + minutes
+    local light
+    if now < 12 * 60 then
+        light = (now - DAWN_FROM) / (DAWN_TO - DAWN_FROM)
+    else
+        light = 1 - (now - DUSK_FROM) / (DUSK_TO - DUSK_FROM)
+    end
+    return NIGHT + (DAY - NIGHT) * math.min(1, math.max(0, light))
+end
+
 local function build()
-    frame = CreateFrame("Frame", "DenoMapMinimap", Minimap)
+    frame = CreateFrame("Frame", "DenoMapTiles", Minimap)
     frame:SetAllPoints(Minimap)
     frame:SetFrameStrata("BACKGROUND")
     frame:SetFrameLevel(100)
@@ -128,7 +157,7 @@ local function deactivate()
     active = false
     C_Minimap.SetDrawGroundTextures(true)
     frame:Hide()
-    shownColumn, shownRow, shownWorld = nil, nil, nil
+    shownColumn, shownRow, shownWorld, shownCopy = nil, nil, nil, nil
     lastA = nil
 end
 
@@ -174,15 +203,25 @@ local function update()
     local set = have[world]
     if not set[c .. "_" .. r] then return deactivate() end
 
-    if c ~= shownColumn or r ~= shownRow or world ~= shownWorld then
-        shownColumn, shownRow, shownWorld = c, r, world
+    -- how many screen pixels one tile covers decides which copy is shown
+    local size = TILE_YARDS * (width / 2) / radius
+    local _, physical = GetPhysicalScreenSize()
+    local scale = frame:GetEffectiveScale()
+    local copy = 3
+    if not hidden(physical) and not hidden(scale) then
+        local pixels = size * scale * physical / 768
+        if pixels <= COPY_PIXELS[1] then copy = 1 elseif pixels <= COPY_PIXELS[2] then copy = 2 end
+    end
+
+    if c ~= shownColumn or r ~= shownRow or world ~= shownWorld or copy ~= shownCopy then
+        shownColumn, shownRow, shownWorld, shownCopy = c, r, world, copy
         local i = 0
         for dr = -1, 1 do
             for dc = -1, 1 do
                 i = i + 1
                 local key = (c + dc) .. "_" .. (r + dr)
                 if set[key] then
-                    slots[i]:SetTexture(BASE .. world .. "\\" .. key, nil, nil, "TRILINEAR")
+                    slots[i]:SetTexture(BASE .. world .. "\\" .. COPY[copy] .. key, nil, nil, "LINEAR")
                     slots[i]:Show()
                 else
                     slots[i]:Hide()
@@ -191,7 +230,6 @@ local function update()
         end
     end
 
-    local size = TILE_YARDS * (width / 2) / radius
     local u, v = column - c, row - r
     local sin, cos = math.sin(facing), math.cos(facing)
     local i = 0
@@ -241,6 +279,11 @@ function driver:OnUpdate(elapsed)
         sinceCheck = 0
         ok = allowed()
         if not ok then deactivate() end
+        local now = tone()
+        if ok and now ~= shownTone then
+            shownTone = now
+            for _, tile in ipairs(slots) do tile:SetVertexColor(now, now, now) end
+        end
     end
     if ok then update() end
 end
@@ -264,6 +307,21 @@ function ns.MinimapReport()
         rotate = C_CVar.GetCVarBool("rotateMinimap") and true or false,
         groundDrawnByGame = C_Minimap.GetDrawGroundTextures() and true or false,
     }
+end
+
+-- What each of the nine tile slots really holds (for the watcher on the local test server).
+function ns.MinimapSlotReport()
+    local out = {}
+    if not slots then return out end
+    for i, tile in ipairs(slots) do
+        local r, g, b, a = tile:GetVertexColor()
+        local w, h = tile:GetSize()
+        local _, physical = GetPhysicalScreenSize()
+        out[i] = string.format("slot %d shown=%s id=%s copy=%s size=%.0f units = %.0f px, tone=%.2f",
+            i, tostring(tile:IsShown()), tostring(tile:GetTextureFileID()), tostring(shownCopy), w,
+            w * frame:GetEffectiveScale() * physical / 768, r)
+    end
+    return out
 end
 
 function ns.MinimapStatus()

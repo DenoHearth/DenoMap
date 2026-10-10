@@ -3,7 +3,7 @@ import json, os, struct, numpy as np, torch
 from PIL import Image
 import etcpak
 
-JOBS = json.load(open('jobs.json')) if os.path.exists('jobs.json') else None
+JOBS = None
 def tile(fid): return Image.open(f'raw/{fid}.blp').convert('RGBA')
 
 def stitch(tiles):
@@ -84,3 +84,24 @@ def write_blp(path, rgba, alpha):
         f.write(head + struct.pack('<16I', *offs) + struct.pack('<16I', *sizes) + b'\0' * 1024)
         for m in mips[:16]: f.write(m)
     os.replace(path + '.tmp', path)
+
+
+# ---- grain (added 2026-10-10) ------------------------------------------------------------
+# RealESRGAN gives clean edges but wipes out the fine texture of the game art: a tile shrunk
+# back to the size of the game file kept 21 to 27 percent of the fine detail of that file
+# (measured), so the minimap and the maps looked flat and soft next to the originals. The
+# texture of the source is therefore laid back over the upscale: what a slight blur removes
+# from the source, enlarged with the picture.
+def grain(src_rgb, sigma=1.0):
+    from PIL import ImageFilter
+    im = Image.fromarray(np.ascontiguousarray(src_rgb[..., :3]))
+    return np.asarray(im, np.float32) - np.asarray(im.filter(ImageFilter.GaussianBlur(sigma)), np.float32)
+
+
+def with_grain(up_rgb, src_rgb, amount=1.0, sigma=1.0):
+    """up_rgb: the 4x upscale of src_rgb (same framing). Returns it with the source texture on top."""
+    g = grain(src_rgb, sigma)
+    h, w = up_rgb.shape[:2]
+    big = np.stack([np.asarray(Image.fromarray(np.ascontiguousarray(g[..., c]), "F").resize((w, h), Image.BICUBIC))
+                    for c in range(3)], -1)
+    return np.clip(up_rgb[..., :3].astype(np.float32) + amount * big + 0.5, 0, 255).astype(np.uint8)

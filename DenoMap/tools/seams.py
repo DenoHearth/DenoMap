@@ -1,47 +1,31 @@
 """Find straight edges in the minimap water: places where two neighbouring tiles disagree.
 
-For every pair of tiles that touch, the picture the addon draws (tile x day tint, water colour
-through the mask) is worked out for the two pixel columns (or rows) that meet, and compared.
-A pair counts when a run of at least 24 pixels differs by more than 14 of 255 on average.
+For every pair of tiles that touch and have water at their shared border (tools/water.py),
+the two pixel columns (or rows) that meet are compared in the 1x files. A pair counts when a
+run of at least 24 pixels differs by more than 14 of 255 on average.
 
     py -3 seams.py            list the worst pairs per world and the totals
 """
-import re
 import sys
-from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-ADDON = Path(__file__).resolve().parent.parent
-DAY = 0.878
-WATER = np.array([27, 44, 53], np.float32)
+import water
+
+ADDON = water.ADDON
 RUN, OFF = 24, 14
 
 
-def kinds():
-    out = {}
-    world = None
-    for line in (ADDON / "Water.lua").read_text(encoding="utf-8").splitlines():
-        m = re.match(r"\s*\[(\d+)\] = \{", line)
-        if m:
-            world = int(m.group(1))
-            out[world] = {}
-        for key, kind in re.findall(r'\["(\d+_\d+)"\] = (\d)', line):
-            out[world][key] = int(kind)
-    return out
-
-
-def edges(world, key, kind):
-    """The four border strips of what the addon draws for one tile: left, right, top, bottom."""
-    folder = ADDON / "Minimap" / str(world)
-    art = np.asarray(Image.open(folder / "q" / f"{key}.blp").convert("RGB").resize((512, 512), Image.BILINEAR), np.float32)
-    if kind == 1:
-        mask = np.asarray(Image.open(folder / "w" / f"{key}.blp").convert("RGBA"), np.float32)[..., 3:] / 255
-    else:
-        mask = np.full(art.shape[:2] + (1,), 1.0 if kind == 2 else 0.0, np.float32)
-    shown = art * DAY * (1 - mask) + WATER * mask
-    return shown[:, 0], shown[:, -1], shown[0], shown[-1], mask[:, 0, 0], mask[:, -1, 0], mask[0, :, 0], mask[-1, :, 0]
+def strips(world, key):
+    """Left, right, top and bottom pixel strips of a tile (1x file, as 512 px) and where its
+    border has water."""
+    art = np.asarray(Image.open(ADDON / "Minimap" / str(world) / "q" / f"{key}.blp").convert("RGB")
+                     .resize((512, 512), Image.BILINEAR), np.float32)
+    column, row = (int(n) for n in key.split("_"))
+    depth = water.clear_depth(world, column, row) if water.tile(world, column, row) is not None else None
+    wet = np.zeros((512, 512), bool) if depth is None else water.spread(depth, 512) > 0.3
+    return (art[:, 0], art[:, -1], art[0], art[-1]), (wet[:, 0], wet[:, -1], wet[0], wet[-1])
 
 
 def worst_run(a, b, wet):
@@ -54,26 +38,28 @@ def worst_run(a, b, wet):
 
 
 def main():
-    table = kinds()
     total = 0
-    for world, tiles in sorted(table.items()):
-        have = {p.stem for p in (ADDON / "Minimap" / str(world) / "q").glob("*.blp")}
+    for folder in sorted((ADDON / "Minimap").iterdir()):
+        if not folder.name.isdigit():
+            continue
+        world = int(folder.name)
+        have = {p.stem for p in (folder / "q").glob("*.blp")}
         cache, found = {}, []
 
-        def strips(key):
+        def get(key):
             if key not in cache:
-                cache[key] = edges(world, key, tiles.get(key, 0))
+                cache[key] = strips(world, key)
             return cache[key]
 
-        near = {k for key in tiles for k in [key] + [f"{int(key.split('_')[0]) + dc}_{int(key.split('_')[1]) + dr}"
-                                                      for dc, dr in ((-1, 0), (0, -1))]}
-        for key in sorted(near & have):
+        for key in sorted(have):
             c, r = (int(n) for n in key.split("_"))
-            for other, mine, theirs, wm, wt in ((f"{c + 1}_{r}", 1, 0, 5, 4), (f"{c}_{r + 1}", 3, 2, 7, 6)):
-                if other not in have or (key not in tiles and other not in tiles):
+            for other, mine, theirs in ((f"{c + 1}_{r}", 1, 0), (f"{c}_{r + 1}", 3, 2)):
+                if other not in have:
                     continue
-                a, b = strips(key), strips(other)
-                wet = (a[wm] > 0.05) | (b[wt] > 0.05)
+                (a, wa), (b, wb) = get(key), get(other)
+                wet = wa[mine] | wb[theirs]
+                if not wet.any():
+                    continue
                 run = worst_run(a[mine], b[theirs], wet)
                 if run >= RUN:
                     found.append((run, key, other))

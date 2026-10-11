@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.5.0 — 2026-10-11
+
+- Minimap water is now the game's own, in 4K. 1.4 laid one flat colour over the tiles from a separate low-resolution layer; it looked plain next to the game. Now the water is painted into the 4K tiles themselves, by the rule the game uses, measured against the game's minimap at 13 places: the water colour covers the sea bed more the deeper it is (17 percent at 1.5 yards, half at 5.5, nearly all past 20), so shallows, sand and the shapes of the shore stay as the art has them; piers, quays, bridges and ships keep the art. Stranglethorn has its own water colour, as in the game
+- The game paints water only in the map square you stand in, and not at all far out at sea or off some coasts (black in the stock game). Deno Map applies the same rule to all clear water, so there is no black; the straight edge between two squares is gone (Booty Bay)
+- Swamps, lava and the battlegrounds of Warsong Gulch and Alterac Valley are left as they are
+- The separate water layer of 1.4 (760 files, 256 MB) is gone again; 1,335 of the 1,888 minimap tiles were repainted in all three sizes
+- `tools/water.py bake` does it, from the untouched upscaled tiles; `tools/seams.py` checks the borders between tiles
+
 ## v1.4.1 — 2026-10-11
 
 - Minimap water: no more straight edge in the water where two map squares meet (Booty Bay and other shores). Green and teal seabed now counts as water at any brightness, so shallows are painted alike on both sides; piers, docks and ships still keep their own look. `tools/seams.py` finds such edges: 17 before, 12 after, the rest are edges in the game's own art.

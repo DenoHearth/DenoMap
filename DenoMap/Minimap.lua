@@ -33,10 +33,17 @@ local COPY_PIXELS = { 512, 1024 }
 -- 0.77 of the file from 21:40 to 04:10, 0.88 from 05:20 to 20:35, a ramp in between.
 -- The tiles are tinted the same, so the map keeps the game's own look at every hour.
 local NIGHT, DAY = 0.772, 0.878
+-- The tile files have no water in them: the game paints terrain water (sea, lakes, rivers) onto
+-- its minimap itself, and without that paint those areas are nearly black. Measured in game on
+-- 2026-10-11 at Stormwind harbour: one flat colour, 23 39 53 of 255 at night, 27 44 53 by day.
+-- A second layer over the tiles shows that colour through the masks of tools/water.py.
+local water = ns.minimapWater or {}  -- [world map id] = { ["column_row"] = 1 (mask file) or 2 (water all over) }
+local WATER_NIGHT, WATER_DAY = { 0.090, 0.153, 0.208 }, { 0.106, 0.173, 0.208 }
+local WHITE = "Interface\\Buttons\\WHITE8X8"
 local DAWN_FROM, DAWN_TO, DUSK_FROM, DUSK_TO = 4 * 60 + 10, 5 * 60 + 20, 20 * 60 + 35, 21 * 60 + 40
 local shownTone
 
-local frame, slots
+local frame, slots, wet, mask, maskSquare
 local active = false
 local shownCopy
 
@@ -111,7 +118,7 @@ end
 
 local function tone()
     local hours, minutes = GetGameTime()
-    if hidden(hours) or hidden(minutes) then return DAY end
+    if hidden(hours) or hidden(minutes) then return DAY, 1 end
     local now = hours * 60 + minutes
     local light
     if now < 12 * 60 then
@@ -119,7 +126,8 @@ local function tone()
     else
         light = 1 - (now - DUSK_FROM) / (DUSK_TO - DUSK_FROM)
     end
-    return NIGHT + (DAY - NIGHT) * math.min(1, math.max(0, light))
+    light = math.min(1, math.max(0, light))
+    return NIGHT + (DAY - NIGHT) * light, light
 end
 
 local function build()
@@ -131,10 +139,7 @@ local function build()
     frame:EnableMouse(false)
     frame:Hide()
 
-    local mask = frame:CreateMaskTexture()
-    mask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetPoint("TOPLEFT", 3, -3)
-    mask:SetPoint("BOTTOMRIGHT", -3, 3)
+    mask = frame:CreateMaskTexture()
 
     local back = frame:CreateTexture(nil, "BACKGROUND")
     back:SetAllPoints()
@@ -149,6 +154,15 @@ local function build()
         tile:AddMaskTexture(mask)
         tile:Hide()
         slots[i] = tile
+    end
+    wet = {}
+    for i = 1, 9 do
+        local layer = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+        layer:SetSnapToPixelGrid(false)
+        layer:SetTexelSnappingBias(0)
+        layer:AddMaskTexture(mask)
+        layer:Hide()
+        wet[i] = layer
     end
 end
 
@@ -166,6 +180,24 @@ local function activate()
     active = true
     C_Minimap.SetDrawGroundTextures(false)
     frame:Show()
+end
+
+-- The tiles are cut to the minimap's own outline: round as the game has it, or square where an
+-- addon made the minimap square and says so the way addons do (GetMinimapShape).
+local function outline()
+    local shape = _G.GetMinimapShape
+    local square = shape ~= nil and shape() == "SQUARE"
+    if square == maskSquare then return end
+    maskSquare = square
+    mask:ClearAllPoints()
+    if square then
+        mask:SetTexture(WHITE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints()
+    else
+        mask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetPoint("TOPLEFT", 3, -3)
+        mask:SetPoint("BOTTOMRIGHT", -3, 3)
+    end
 end
 
 -- Everything that has to hold before the game's terrain may be switched off.
@@ -202,6 +234,7 @@ local function update()
     local c, r = math.floor(column), math.floor(row)
     local set = have[world]
     if not set[c .. "_" .. r] then return deactivate() end
+    local wetSet = water[world]
 
     -- how many screen pixels one tile covers decides which copy is shown
     local size = TILE_YARDS * (width / 2) / radius
@@ -226,6 +259,16 @@ local function update()
                 else
                     slots[i]:Hide()
                 end
+                local kind = set[key] and wetSet and wetSet[key]
+                if kind == 1 then
+                    wet[i]:SetTexture(BASE .. world .. "\\w\\" .. key, nil, nil, "LINEAR")
+                    wet[i]:Show()
+                elseif kind == 2 then
+                    wet[i]:SetTexture(WHITE)
+                    wet[i]:Show()
+                else
+                    wet[i]:Hide()
+                end
             end
         end
     end
@@ -242,6 +285,10 @@ local function update()
             tile:SetSize(size, size)
             tile:SetPoint("CENTER", frame, "CENTER", east * cos + north * sin, north * cos - east * sin)
             if facing ~= 0 or turned then tile:SetRotation(-facing) end
+            local layer = wet[i]
+            layer:SetSize(size, size)
+            layer:SetPoint("CENTER", frame, "CENTER", east * cos + north * sin, north * cos - east * sin)
+            if facing ~= 0 or turned then layer:SetRotation(-facing) end
         end
     end
     turned = facing ~= 0
@@ -265,6 +312,7 @@ driver:SetScript("OnEvent", function(self, event, name)
         self:SetScript("OnUpdate", nil)
     else
         if not frame then build() end
+        outline()
         cal.world = nil                   -- measure again in the new place
         sinceCheck = 1
         self:SetScript("OnUpdate", self.OnUpdate)
@@ -279,10 +327,14 @@ function driver:OnUpdate(elapsed)
         sinceCheck = 0
         ok = allowed()
         if not ok then deactivate() end
-        local now = tone()
+        local now, light = tone()
         if ok and now ~= shownTone then
             shownTone = now
             for _, tile in ipairs(slots) do tile:SetVertexColor(now, now, now) end
+            local red = WATER_NIGHT[1] + (WATER_DAY[1] - WATER_NIGHT[1]) * light
+            local green = WATER_NIGHT[2] + (WATER_DAY[2] - WATER_NIGHT[2]) * light
+            local blue = WATER_NIGHT[3] + (WATER_DAY[3] - WATER_NIGHT[3]) * light
+            for _, layer in ipairs(wet) do layer:SetVertexColor(red, green, blue) end
         end
     end
     if ok then update() end

@@ -92,8 +92,9 @@ local function sweepTiles(canvas)
         end
     end
     if seen > 0 then
-        local changed = done ~= last.tiles or seen ~= last.seen or copyShown ~= last.copy
-        last.tiles, last.seen, last.missing, last.copy = done, seen, table.concat(missing, " "), copyShown
+        local map = WorldMapFrame:GetMapID()
+        local changed = done ~= last.tiles or seen ~= last.seen or copyShown ~= last.copy or map ~= last.map
+        last.tiles, last.seen, last.missing, last.copy, last.map = done, seen, table.concat(missing, " "), copyShown, map
         -- local test server only: the probe's live line to the watcher
         local eyes = _G.ForeverProbeEyes
         if eyes and changed then

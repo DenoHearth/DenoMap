@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.0 — 2026-10-11
+
+- Minimap: sea, lakes and rivers are blue again instead of nearly black (the game paints water only in the map square you stand in; Deno Map now paints all of it). The 4K minimap follows a square minimap (Deno Square Minimap or any addon that reports its shape).
+
 ## v1.3.0 — 2026-10-10
 
 First version measured in the game against the game's own picture, pixel for pixel. Before this the minimap looked softer and brighter than the original at normal zoom.

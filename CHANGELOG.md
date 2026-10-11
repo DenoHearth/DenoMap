@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.0 — 2026-10-11
+
+- The 4K minimap now has the game's colour, not only its brightness. The game lights its minimap with the zone's light: warm in Elwynn, cold in Winterspring, blue at night. Deno Map tinted plain grey. It now follows the zone's light through the day (direct and ambient light colour from the game's own light tables, rule fitted to the game's minimap at twelve places by day and four at night). Against the game, per colour channel: within about 5 percent by day, within about 6 at night; before, red was up to 10 percent too dark and blue up to 12 percent off
+- `tools/lights.py` writes the light table (`Lights.lua`, 50 KB)
+
 ## v1.5.0 — 2026-10-11
 
 - Minimap water is now the game's own, in 4K. 1.4 laid one flat colour over the tiles from a separate low-resolution layer; it looked plain next to the game. Now the water is painted into the 4K tiles themselves, by the rule the game uses, measured against the game's minimap at 13 places: the water colour covers the sea bed more the deeper it is (17 percent at 1.5 yards, half at 5.5, nearly all past 20), so shallows, sand and the shapes of the shore stay as the art has them; piers, quays, bridges and ships keep the art. Stranglethorn has its own water colour, as in the game

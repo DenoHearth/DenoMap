@@ -191,6 +191,8 @@ SlashCmdList.DENOMAP = function(msg)
     end
     if eyes then
         -- for the watcher on the local test server only: set the minimap zoom, say the state
+        local hour = tonumber(word:match("^hour (%d+)$"))      -- the tint as at that hour of the game clock
+        if hour or word == "hour" then ns.testHour = hour end
         local zoom = tonumber(word:match("^zoom (%d+)$"))
         if zoom then Minimap:SetZoom(math.min(zoom, Minimap:GetZoomLevels() - 1)) end
         if word == "minimap" then ns.ToggleMinimap() end

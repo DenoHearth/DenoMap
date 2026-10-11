@@ -127,6 +127,76 @@ local function tone()
     return NIGHT + (DAY - NIGHT) * light, light
 end
 
+-- The tint has a colour, and it is the zone's: the game lights its minimap. Measured in game on
+-- 2026-10-11 at twelve places at midday and four at night, per colour channel:
+--   seen = file x (fixed part + share x direct light colour - share x ambient light colour)
+-- of the zone at that hour, to within 0.024 on average (Elwynn by day 0.97 0.83 0.80, Winterspring
+-- 0.76 0.92 0.96, Elwynn at night 0.80 0.78 1.0). The light colours come from the game's own light
+-- tables (Lights.lua, tools/lights.py). Where a world has none, the grey of tone() above is used.
+-- The numbers hold for these upscaled tiles, which are a little greener than the game's own.
+local TINT = { { 0.724, 0.254, 0.0 }, { 0.679, 0.255, 0.035 }, { 0.94, 0.219, 0.338 } }   -- red, green, blue: fixed, direct, ambient
+local lights, suns = ns.minimapLights or {}, ns.minimapSun or {}
+local atX, atY                      -- the player in world yards (north, west), set by update()
+
+local function sunAt(set, time)
+    local keys = suns[set]
+    if not keys then return end
+    local count = #keys / 7
+    local last = count
+    for i = 1, count do
+        if keys[i * 7 - 6] <= time then last = i end
+    end
+    local nextKey = last % count + 1
+    local from, to = keys[last * 7 - 6], keys[nextKey * 7 - 6]
+    if to <= from then to = to + 2880 end
+    local at = time >= from and time or time + 2880
+    local part = to > from and (at - from) / (to - from) or 0
+    local a, b = last * 7 - 6, nextKey * 7 - 6
+    local out = {}
+    for n = 1, 6 do out[n] = keys[a + n] + (keys[b + n] - keys[a + n]) * part end
+    return out
+end
+
+local function tint()
+    local grey = tone()
+    local world = lights[cal.world]
+    local hours, minutes = GetGameTime()
+    if not world or not atX or hidden(hours) or hidden(minutes) then return grey, grey, grey end
+    local time = ((ns.testHour or hours) * 60 + minutes) * 2
+    local sum, weight = { 0, 0, 0, 0, 0, 0 }, 0
+    for i = 1, #world do
+        local spot = world[i]
+        local dx, dy = atX - spot[1], atY - spot[2]
+        local far = math.sqrt(dx * dx + dy * dy)
+        if far < spot[4] then
+            local share = far <= spot[3] and 1 or (spot[4] - far) / (spot[4] - spot[3])
+            local light = sunAt(spot[5], time)
+            if light then
+                for n = 1, 6 do sum[n] = sum[n] + light[n] * share end
+                weight = weight + share
+            end
+        end
+    end
+    if weight >= 1 then
+        for n = 1, 6 do sum[n] = sum[n] / weight end
+    else
+        local light = sunAt(world.base, time)
+        if light then
+            for n = 1, 6 do sum[n] = sum[n] + light[n] * (1 - weight) end
+        elseif weight == 0 then
+            return grey, grey, grey
+        else
+            for n = 1, 6 do sum[n] = sum[n] / weight end
+        end
+    end
+    local out = {}
+    for n = 1, 3 do
+        local rule = TINT[n]
+        out[n] = math.min(1, rule[1] + rule[2] * sum[n] / 255 - rule[3] * sum[n + 3] / 255)
+    end
+    return out[1], out[2], out[3]
+end
+
 local function build()
     frame = CreateFrame("Frame", "DenoMapTiles", Minimap)
     frame:SetAllPoints(Minimap)
@@ -219,6 +289,7 @@ local function update()
     local world = cal.world
     local column = 32 + (a * cal.unitEastA + b * cal.unitEastB) / TILE_YARDS
     local row = 32 + (a * cal.unitSouthA + b * cal.unitSouthB) / TILE_YARDS
+    atX, atY = (32 - row) * TILE_YARDS, (32 - column) * TILE_YARDS
     local c, r = math.floor(column), math.floor(row)
     local set = have[world]
     if not set[c .. "_" .. r] then return deactivate() end
@@ -300,10 +371,11 @@ function driver:OnUpdate(elapsed)
         sinceCheck = 0
         ok = allowed()
         if not ok then deactivate() end
-        local now = tone()
+        local red, green, blue = tint()
+        local now = math.floor(red * 255 + 0.5) * 65536 + math.floor(green * 255 + 0.5) * 256 + math.floor(blue * 255 + 0.5)
         if ok and now ~= shownTone then
             shownTone = now
-            for _, tile in ipairs(slots) do tile:SetVertexColor(now, now, now) end
+            for _, tile in ipairs(slots) do tile:SetVertexColor(red, green, blue) end
         end
     end
     if ok then update() end

@@ -17,7 +17,7 @@ water the dark of the tile becomes one flat colour, while what stands in the wat
 bridges, ships) keeps the tile's own colour, and shallows keep the tile's colour too. The
 game does that only in the tile the player stands in: the next tile's sea stays black, with
 a straight edge between them. The addon paints every tile alike. So the mask is "clear
-water of some depth here" times "the tile is dark here". A tile that is water all over
+water of some depth here" times "the tile shows water bed here" (dark, or green to teal). A tile that is water all over
 needs no file.
 """
 import struct
@@ -111,9 +111,17 @@ def mask(world, column, row):
     wet = np.asarray(Image.fromarray((wet * 255).astype(np.uint8)).resize((SIDE + 4, SIDE + 4), Image.BILINEAR)
                      .crop((2, 2, SIDE + 2, SIDE + 2)), np.float32) / 255
     art = Image.open(ADDON / "Minimap" / str(world) / "q" / f"{column}_{row}.blp").convert("RGB")
-    total = np.asarray(art.resize((SIDE, SIDE), Image.BILINEAR), np.float32).sum(2)
+    rgb = np.asarray(art.resize((SIDE, SIDE), Image.BILINEAR), np.float32)
+    total = rgb.sum(2)
     dark = np.clip((LIGHT - total) / (LIGHT - DARK), 0, 1)
-    return wet * dark * dark * (3 - 2 * dark)
+    dark = dark * dark * (3 - 2 * dark)
+    # The bed of a sea or lake is green to teal in the tile art, at any brightness; what stands in
+    # the water (wood, stone, sails) is brown, grey or white. Green counts as water bed, so two
+    # tiles whose art shows the same shallows lighter and darker get the same paint (the straight
+    # edge at Booty Bay in 1.4.0 came from asking for darkness alone).
+    red, green = rgb[..., 0], rgb[..., 1]
+    bed = np.clip((green - red * 1.04) / (red * 0.12 + 4), 0, 1)
+    return wet * np.maximum(dark, bed)
 
 
 def build():

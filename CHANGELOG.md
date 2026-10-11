@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.1 — 2026-10-11
+
+- Minimap water: no more straight edge in the water where two map squares meet (Booty Bay and other shores). Green and teal seabed now counts as water at any brightness, so shallows are painted alike on both sides; piers, docks and ships still keep their own look. `tools/seams.py` finds such edges: 17 before, 12 after, the rest are edges in the game's own art.
+
 ## v1.4.0 — 2026-10-11
 
 - Minimap: sea, lakes and rivers are blue again instead of nearly black (the game paints water only in the map square you stand in; Deno Map now paints all of it). The 4K minimap follows a square minimap (Deno Square Minimap or any addon that reports its shape).

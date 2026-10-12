@@ -22,8 +22,8 @@ upscaling to 4k", so 1.5.0 paints the water the way the game does, measured, and
 The one place it goes beyond the game: the game paints water only in the tile the player
 stands in, and not at all far out at sea or off some coasts (Dustwallow, Desolace, Darkshore:
 black in the stock game). The same rule is applied to all clear water, so there is no black.
-The water colour differs a little from zone to zone in the game (Wetlands and Westfall come
-out darker than Stormwind); only the default and the Stranglethorn colour are known and used.
+What looked like a darker water colour in some zones (Wetlands, Westfall) was depth: the
+colour changes with it, channel by channel (see DEPTHS below). Stranglethorn's water has no red.
 
 Where the water is comes from the terrain data of the local test server (the .map files its
 extractor cut from the same game files): ground height on a 129 x 129 grid per tile, the
@@ -101,20 +101,38 @@ def tile(world, column, row):
 
 ADDON = Path(__file__).resolve().parent.parent
 PLAIN = ADDON.parent / "_work" / "mini" / "nowater"   # the tiles before any water was painted
-DAY = 0.878                # the addon draws a tile at this share of the file by day (Minimap.lua)
-FOG_YARDS = 8.0            # the water colour covers 1 - exp(-depth / FOG_YARDS) of the sea bed (measured)
-WATER_DAY = np.array([29, 42, 50], np.float32)    # the game's water colour by day, default light (harbour, Ratchet)
-WATER_STV = np.array([0, 42, 51], np.float32)     # under the Stranglethorn lights, which carry a water colour of their own
+DAY = 0.878                # the addon draws a tile at this share of the file by day where a world has no lights (Minimap.lua)
+# The game's water by depth, measured 2026-10-12 from the captures of 2026-10-11
+# (_work/mini/watermeasure/curvefit.py; seven places, 44,000 water pixels, to within 1.5 of 255):
+#   seen = sea bed x exp(-depth / CLEAR_YARDS) + ADDED(depth), each colour channel by itself.
+# Red goes first, then green, blue last, so shallow water is green and only deep water blue;
+# lakes and rivers are clearer than the sea. (1.5.0 and 1.6.0 used one colour and one depth
+# for all three channels: shallow seas and ponds came out too blue.)
+DEPTHS = [0, 0.6, 1.5, 2.5, 3.7, 5.2, 7, 9.6, 12.6, 17, 23, 30, 40, 52, 70]
+SEA_CLEAR = (3.5, 6.0, 10.0)
+SEA_ADDED = ([0, 1.2, 5.4, 8.4, 11.3, 14.5, 16.9, 20.2, 21.4, 21.8, 28.0, 30.0, 30.0, 29.0, 27.0],
+             [0, 2.8, 6.5, 10.9, 14.8, 18.2, 21.9, 26.2, 29.6, 33.2, 37.4, 39.9, 42.0, 42.0, 44.0],
+             [0, 0.5, 1.6, 5.4, 9.8, 14.1, 18.1, 21.0, 24.4, 30.8, 39.7, 43.3, 48.8, 50.3, 55.0])
+LAKE_CLEAR = (4.0, 8.5, 18.5)
+# measured to 34 yards (Loch Modan); deeper than that the lake goes the way the sea does
+LAKE_ADDED = ([0, 3.4, 7.7, 10.6, 13.2, 16.8, 18.9, 20.8, 21.7, 22.9, 23.0, 22.0, 22.0, 22.0, 22.0],
+              [0, 2.5, 4.4, 7.4, 11.1, 14.8, 18.0, 22.2, 27.8, 33.8, 36.2, 37.5, 40.0, 42.0, 44.0],
+              [0, 4.8, 5.5, 7.1, 9.7, 12.2, 15.0, 18.9, 23.2, 30.3, 34.7, 38.7, 43.0, 48.0, 55.0])
+SEA = {2, 6, 10, 14, 1250, 1287, 1296}            # the liquid types that are sea; the other clear ones are lake and river
 # Light.db2, build 70291: the lights with that colour on Eastern Kingdoms (x, y, falloff start, falloff end)
 STV_LIGHTS = ((-13333.3, 0.0, 1771.0, 2005.0), (-14353.0, 488.0, 152.0, 229.0))
 BED_AT = [1, 3, 6, 12, 20, 30]            # yards of water ...
 BED_LIMIT = [900, 300, 265, 195, 125, 85]   # ... and the brightest a sea bed gets in the art there
 SHARP = 2.0                # fine brightness movement (of 255, pixel against its neighbours) from which something counts as sharp
 # Alterac Valley and Warsong Gulch: the black around the battleground is not sea, though the
-# terrain data has a water level under it. Nothing is painted there.
-NO_WATER = {30, 489}
+# terrain data has a sea level under it. The sea types are not painted there; Alterac Valley's
+# pond is a lake type and is. (Warsong Gulch has no water inside.)
+NO_SEA = {30, 489}
 NONE = 0.02                # a tile whose paint never gets above this has no water worth painting
-SLOPE = 2.0                # yards the water may get deeper from one grid point (4 yards) to the next
+# Yards the water may get deeper from one grid point (4 yards) to the next. Only there for
+# the places where the terrain simply ends; real shores are not that steep. (It was 2 until
+# 1.6.0, which made every shore shallower than it is and so too little blue.)
+SLOPE = 12.0
 EDGE = 8                   # pixels at a tile border that are judged by their neighbour further in
 # The liquid types that are clear water (LiquidType table, build 70291): sea, lakes, rivers,
 # canals, springs. Swamps, puddles, hot springs, tar, fel, slime and lava keep the tile's own look.
@@ -136,7 +154,8 @@ def clear_depth(world, column, row):
             if got is None:
                 continue
             depth, kind, entry = got
-            part = np.where(np.isin(entry, list(CLEAR)), np.minimum(depth, 60), 0).astype(np.float32)
+            clear = CLEAR - SEA if world in NO_SEA else CLEAR
+            part = np.where(np.isin(entry, list(clear)), np.minimum(depth, 60), 0).astype(np.float32)
             y, x = (dr + 1) * 128, (dc + 1) * 128
             wide[y:y + 129, x:x + 129] = np.maximum(wide[y:y + 129, x:x + 129], part)
     if wide[128:257, 128:257].max() <= 0:
@@ -152,6 +171,36 @@ def clear_depth(world, column, row):
     return np.where(wide > 0, np.minimum(eased, wide), 0)[128:257, 128:257]
 
 
+def sea_share(world, column, row):
+    """How much of the water at each grid point is sea (1) and not lake or river (0), 129 x 129, edges softened."""
+    entry = tile(world, column, row)[2]
+    sea = np.isin(entry, list(SEA)).astype(np.float32)
+    soft = Image.fromarray(np.rint(sea * 255).astype(np.uint8)).filter(ImageFilter.BoxBlur(4))
+    return np.asarray(soft, np.float32) / 255
+
+
+# The addon tints a tile with the zone's light (Minimap.lua); the game does not tint its water
+# (measured: the same green and blue under every zone light). So the water colour is divided by
+# the tint the tile gets at midday (tinttable.py: the rule and the measured corrections), and
+# comes out as measured then.
+def day_tint(world, column, row, side):
+    """The tint the addon gives this tile at midday, side x side x 3."""
+    import tinttable
+    grid = 9
+    tint = np.zeros((grid, grid, 3), np.float32)
+    for i in range(grid):
+        for j in range(grid):
+            got = tinttable.tint(world, (32 - (row + i / (grid - 1))) * 533.33333, (32 - (column + j / (grid - 1))) * 533.33333)
+            tint[i, j] = DAY if got is None else got
+    # 9 x 9 samples on the tile, bilinear to the pixels
+    at = (np.arange(side, dtype=np.float32) + 0.5) / side * (grid - 1)
+    low = np.minimum(at.astype(np.int32), grid - 2)
+    part = (at - low)[:, None, None]
+    rows = tint[low] * (1 - part) + tint[low + 1] * part
+    part = (at - low)[None, :, None]
+    return (rows[:, low] * (1 - part) + rows[:, low + 1] * part).astype(np.float32)
+
+
 def spread(grid, side):
     """A 129 x 129 grid (samples on the cell corners) as side x side pixels, bilinear."""
     at = (np.arange(side, dtype=np.float32) + 0.5) / side * 128
@@ -165,11 +214,11 @@ def paint(world, column, row, art):
     """The tile with its water painted in, the way the game paints it. art: side x side x 3,
     the tile as the upscaler made it. None when the tile has no water worth painting.
 
-    The rule, measured against the game's own minimap at 13 places at midday (2026-10-11,
-    _work/mini/watermeasure): seen = art x (1 - cover) + water colour x cover, with
-    cover = 1 - exp(-depth / 8 yards). It explains the game's picture to within 2 to 6 of
-    255 per place. What stands in the water (piers, bridges, ships) keeps the art."""
-    if world in NO_WATER or tile(world, column, row) is None:
+    The rule, measured against the game's own minimap at midday (_work/mini/watermeasure):
+    seen = art x see-through(depth) + added colour(depth), per colour channel, sea and lake
+    each with their own numbers (DEPTHS and the tables beside it). What stands in the water
+    (piers, bridges, ships) keeps the art."""
+    if tile(world, column, row) is None:
         return None
     depth = clear_depth(world, column, row)
     if depth is None:
@@ -220,10 +269,13 @@ def paint(world, column, row, art):
     above = Image.fromarray(np.rint((1 - bed) * 255).astype(np.uint8))
     above = above.filter(ImageFilter.MaxFilter(reach)).filter(ImageFilter.MinFilter(reach))
     bed = np.minimum(bed, 1 - np.asarray(above, np.float32) / 255)
-    cover = (1 - np.exp(-depth / FOG_YARDS)) * bed
-    if cover.max() < NONE:
+    sea = spread(sea_share(world, column, row), side)[..., None]
+    deep = depth[..., None]
+    through = np.exp(-deep / np.array(SEA_CLEAR, np.float32)) * sea + np.exp(-deep / np.array(LAKE_CLEAR, np.float32)) * (1 - sea)
+    added = (np.stack([np.interp(depth, DEPTHS, SEA_ADDED[n]) for n in range(3)], -1) * sea
+             + np.stack([np.interp(depth, DEPTHS, LAKE_ADDED[n]) for n in range(3)], -1) * (1 - sea))
+    if ((1 - through[..., 1]) * bed).max() < NONE:
         return None
-    colour = WATER_DAY
     if world == 0:
         span = (np.arange(side, dtype=np.float32) + 0.5) / side
         wx = (32 - (row + span)) * 533.33333
@@ -232,17 +284,18 @@ def paint(world, column, row, art):
         for lx, ly, start, end in STV_LIGHTS:
             dist = np.hypot(wx[:, None] - lx, wy[None, :] - ly)
             near = np.maximum(near, np.clip((end - dist) / (end - start), 0, 1))
-        if near.max() > 0:
-            colour = WATER_DAY + (WATER_STV - WATER_DAY) * near[..., None]
-    # the addon darkens the whole tile (DAY); the colour above is what should be seen
-    mixed = rgb * (1 - cover[..., None]) + colour / DAY * cover[..., None]
+        # under the Stranglethorn lights the water has no red (measured at Booty Bay: 0 43 52)
+        added[..., 0] *= 1 - near
+    # the addon tints the whole tile; the added colour above is what should be seen at midday
+    wet = bed[..., None]
+    mixed = rgb * (1 - wet * (1 - through)) + added / day_tint(world, column, row, side) * wet
     return np.clip(np.rint(mixed), 0, 255).astype(np.uint8)
 
 
 def bake_one(job):
     import shutil
     from ladder import cut
-    from up import write_blp
+    from up import read_blp, write_blp
     world, name = job
     folder = ADDON / "Minimap" / str(world)
     target = folder / name
@@ -253,7 +306,7 @@ def bake_one(job):
     if not plain.is_file():
         plain.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target, plain)
-    art = np.asarray(Image.open(plain).convert("RGB"))
+    art = read_blp(str(plain))        # exactly as the game reads it (Pillow reads these darker)
     done = paint(world, column, row, art)
     if done is None:
         if target.read_bytes() != plain.read_bytes():      # painted by an earlier run, no water now

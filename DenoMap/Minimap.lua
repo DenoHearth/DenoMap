@@ -116,7 +116,7 @@ end
 local function tone()
     local hours, minutes = GetGameTime()
     if hidden(hours) or hidden(minutes) then return DAY, 1 end
-    local now = hours * 60 + minutes
+    local now = (ns.testHour or hours) * 60 + minutes       -- testHour: the watcher's "/denomap hour N" on the test server
     local light
     if now < 12 * 60 then
         light = (now - DAWN_FROM) / (DAWN_TO - DAWN_FROM)
@@ -134,7 +134,23 @@ end
 -- 0.76 0.92 0.96, Elwynn at night 0.80 0.78 1.0). The light colours come from the game's own light
 -- tables (Lights.lua, tools/lights.py). Where a world has none, the grey of tone() above is used.
 -- The numbers hold for these upscaled tiles, which are a little greener than the game's own.
+--
+-- That rule is a few percent off in most zones and far off in some (Dun Morogh came out 19 percent
+-- too bright in red, Tanaris 16 percent too blue). Measured in game on 2026-10-12 at 64 places at
+-- midday: inside one zone the error is the same everywhere, and nothing in the light tables
+-- explains it. So a zone light can carry a measured correction (three more numbers in Lights.lua,
+-- from tools/tintspots.json), blended the way the lights themselves are.
 local TINT = { { 0.724, 0.254, 0.0 }, { 0.679, 0.255, 0.035 }, { 0.94, 0.219, 0.338 } }   -- red, green, blue: fixed, direct, ambient
+-- Checked at night at nine places (2026-10-12): the rule with the corrections came out 2.5 percent
+-- too bright in red and 2 in green; that much is taken off as the light goes.
+local NIGHT_TRIM = { 0.975, 0.98, 1 }
+-- In Stormwind and Orgrimmar the game does not draw terrain tiles at all: it shows its picture of
+-- the city, and that one is not lit. Measured by day and at midnight, the same both times:
+-- Stormwind 0.87 0.84 0.86 of the file, Orgrimmar 0.90 0.87 0.90, whatever the zone light does.
+-- (Thunder Bluff and Darnassus are ordinary terrain and follow the zone.) By zone map id.
+-- Stormwind's harbour is on the city map but is terrain like any other: west of 1130 yards
+-- (the fourth number) the zone tint stays.
+local CITY = { [1453] = { 0.867, 0.844, 0.862, 1130 }, [1454] = { 0.9, 0.87, 0.895 } }
 local lights, suns = ns.minimapLights or {}, ns.minimapSun or {}
 local atX, atY                      -- the player in world yards (north, west), set by update()
 
@@ -158,12 +174,15 @@ local function sunAt(set, time)
 end
 
 local function tint()
-    local grey = tone()
+    local city = CITY[cal.map]
+    if city and not (city[4] and atY and atY > city[4]) then return city[1], city[2], city[3] end
+    local grey, daylight = tone()
     local world = lights[cal.world]
     local hours, minutes = GetGameTime()
     if not world or not atX or hidden(hours) or hidden(minutes) then return grey, grey, grey end
     local time = ((ns.testHour or hours) * 60 + minutes) * 2
     local sum, weight = { 0, 0, 0, 0, 0, 0 }, 0
+    local fix = { 0, 0, 0 }
     for i = 1, #world do
         local spot = world[i]
         local dx, dy = atX - spot[1], atY - spot[2]
@@ -173,26 +192,51 @@ local function tint()
             local light = sunAt(spot[5], time)
             if light then
                 for n = 1, 6 do sum[n] = sum[n] + light[n] * share end
+                for n = 1, 3 do fix[n] = fix[n] + (spot[5 + n] or 1) * share end
                 weight = weight + share
             end
         end
     end
     if weight >= 1 then
         for n = 1, 6 do sum[n] = sum[n] / weight end
+        for n = 1, 3 do fix[n] = fix[n] / weight end
     else
-        local light = sunAt(world.base, time)
+        -- what the local lights leave room for is filled by the zone light the player stands
+        -- in (an outline on the map), else by the light of the whole world
+        local base, baseFix = world.base, world.baseFix
+        local zones = world.zones
+        if zones then
+            for i = 1, #zones do
+                local zone = zones[i]
+                local inside, count = false, (#zone - 4) / 2
+                for k = 1, count do
+                    local x1, y1 = zone[3 + 2 * k], zone[4 + 2 * k]
+                    local nextK = k % count + 1
+                    local x2, y2 = zone[3 + 2 * nextK], zone[4 + 2 * nextK]
+                    if (y1 > atY) ~= (y2 > atY) and atX < (x2 - x1) * (atY - y1) / (y2 - y1) + x1 then inside = not inside end
+                end
+                if inside then
+                    base, baseFix = zone[1], { zone[2], zone[3], zone[4] }
+                    break
+                end
+            end
+        end
+        local light = sunAt(base, time)
         if light then
             for n = 1, 6 do sum[n] = sum[n] + light[n] * (1 - weight) end
+            for n = 1, 3 do fix[n] = fix[n] + (baseFix and baseFix[n] or 1) * (1 - weight) end
         elseif weight == 0 then
             return grey, grey, grey
         else
             for n = 1, 6 do sum[n] = sum[n] / weight end
+            for n = 1, 3 do fix[n] = fix[n] / weight end
         end
     end
     local out = {}
     for n = 1, 3 do
         local rule = TINT[n]
-        out[n] = math.min(1, rule[1] + rule[2] * sum[n] / 255 - rule[3] * sum[n + 3] / 255)
+        out[n] = math.min(1, math.min(1, rule[1] + rule[2] * sum[n] / 255 - rule[3] * sum[n + 3] / 255) * fix[n])
+        out[n] = out[n] * (1 - (1 - daylight) * (1 - NIGHT_TRIM[n]))
     end
     return out[1], out[2], out[3]
 end

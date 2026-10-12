@@ -10,8 +10,10 @@ hwnd = e.game_window(proc.pid)
 BOX = (1380, 60, 1600, 270)
 CMD = ARGS[0] if ARGS else "sweep"
 TAG = CMD.replace(" ", "")
+# what is on the strip now is old news (the "done" of an earlier sweep would end this one at once)
+pic = e.grab(hwnd); old = e.read_strip(pic) if pic else None
 e.say(hwnd, "/denomap " + CMD)
-shots, seen, deadline = {}, None, time.time() + 150
+shots, seen, deadline = {}, old[0] if old else None, time.time() + 150
 while time.time() < deadline:
     pic = e.grab(hwnd); msg = e.read_strip(pic) if pic else None
     if msg and msg[0] != seen:

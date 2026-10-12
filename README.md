@@ -92,7 +92,8 @@ To save space you can delete `DenoMap\Minimap`: the world map keeps working and 
 
 - **Indoors and in dungeons the minimap is the game's own.** Inside buildings and caves the game shows floor plans that an addon cannot place, and dungeons give addons no position.
 - **An upscale sharpens, it does not invent.** Lines and lettering get crisp; detail the artists never painted is not added. The minimap gains most when it is zoomed in.
-- **New in the game, new here.** Version 1.2.1 was made from game build 1.60.1.70291. When a patch changes a map, its textures have to be made again (see below).
+- **Rain.** In rain the game darkens its minimap; an addon cannot read the weather, so the 4K minimap shows clear weather.
+- **New in the game, new here.** The textures were made from game build 1.60.1.70291 and checked against 1.60.1.70338 (nothing changed). When a patch changes a map, its textures have to be made again (see below).
 
 ## How it works
 

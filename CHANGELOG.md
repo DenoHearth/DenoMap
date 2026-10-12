@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.7.0 — 2026-10-12
+
+Every open point of 1.6.0, each one measured in the game against the game's own minimap.
+
+- **Minimap water has the game's depth, colour by colour.** 1.5 and 1.6 used one water colour and one depth for red, green and blue, so shallow seas and ponds came out too blue (Westfall, Wetlands, the Gadgetzan pond). The game's water takes red first, then green, blue last: shallow water is green, only deep water is blue, and lakes are about twice as clear as the sea. That rule is now painted into the tiles (fitted over 44,000 water pixels at seven places, to within 1.5 of 255). Menethil Harbor: game 22 35 31, Deno Map 22 34 30. Stormwind harbour: 29 42 49 against 32 41 49
+- **The minimap tint is measured per zone.** The 1.6 rule was right to a few percent in most zones and far off in some: Dun Morogh 19 percent too bright in red, Tanaris 16 percent too blue, and the zones it was never fitted on worse still (17 percent in blue on average). Nothing in the game's light tables explains those differences, so the game's tint was measured at 183 places at midday, one for nearly every zone light, and each light now carries its own correction. At 16 places that were not used for it: within about 2 percent in red and green
+- **Zone outlines.** Fifteen zones (Burning Steppes, Mulgore, Elwynn, Ashenvale, Blasted Lands and more) are lit by an outline on the map instead of a round light. Those are followed now too
+- **Stormwind and Orgrimmar.** There the game shows its picture of the city, which is not lit by the zone: the same by day and at midnight. Deno Map now draws those two cities with that tint instead of the zone's (it was 8 percent off in red and 12 in blue)
+- **Night:** 2.5 percent less red and 2 percent less green, as measured at nine places at midnight
+- **Truer colours in every repainted tile.** The picture library used to read a tile decoded it darker than the game does (red up to 5 of 255), and the texture compressor rounded dark sea down by another 3 to 7. Tiles are now read exactly and compressed with the loss put back
+- **Alterac Valley's pond** is painted (Warsong Gulch has no water inside)
+- **Deeper zoom checked for taint:** real mouse wheel and drag on the world map with encounter, combat and map restrictions forced: no error, no blocked action
+- **Game build 1.60.1.70338:** all 3,592 source textures compared, none changed
+- 1,324 of the 1,888 minimap tiles were repainted in all three sizes
+
+Known and left as it is: rain darkens the game's own minimap (heavy rain by about a fifth). An addon cannot read the weather, so Deno Map shows clear weather. The game's water also shifts a little with the hour; the tiles match midday.
+
 ## v1.6.0 — 2026-10-11
 
 - The 4K minimap now has the game's colour, not only its brightness. The game lights its minimap with the zone's light: warm in Elwynn, cold in Winterspring, blue at night. Deno Map tinted plain grey. It now follows the zone's light through the day (direct and ambient light colour from the game's own light tables, rule fitted to the game's minimap at twelve places by day and four at night). Against the game, per colour channel: within about 5 percent by day, within about 6 at night; before, red was up to 10 percent too dark and blue up to 12 percent off

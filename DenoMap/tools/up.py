@@ -64,6 +64,66 @@ def bleed(rgba, rounds=24):
     keep = (a > 0.999)[..., None]
     return np.where(keep, src, out).clip(0, 255).astype(np.uint8)
 
+def decode_bc1(data, w, h):
+    """DXT1 blocks as the graphics card reads them: h x w x 3, float. (Pillow reads these files
+    darker: it widens the 5 and 6 bit colours by shifting only, up to 7 of 255 low in red and
+    blue. Measured 2026-10-12; anything that reads a tile to work on it has to use this.)"""
+    n = (w // 4) * (h // 4)
+    b = np.frombuffer(data, np.uint8)[:n * 8].reshape(n, 8)
+    c0 = b[:, 0].astype(np.uint32) | (b[:, 1].astype(np.uint32) << 8)
+    c1 = b[:, 2].astype(np.uint32) | (b[:, 3].astype(np.uint32) << 8)
+
+    def wide(c):
+        r, g, bl = (c >> 11) & 31, (c >> 5) & 63, c & 31
+        return np.stack([(r << 3) | (r >> 2), (g << 2) | (g >> 4), (bl << 3) | (bl >> 2)], -1).astype(np.float32)
+    e0, e1 = wide(c0), wide(c1)
+    four = (c0 > c1)[:, None]
+    pal = np.stack([e0, e1, np.where(four, (2 * e0 + e1) / 3, (e0 + e1) / 2), np.where(four, (e0 + 2 * e1) / 3, 0)], 1)
+    idx = np.frombuffer(b[:, 4:8].tobytes(), '<u4')
+    bits = np.stack([(idx >> (2 * i)) & 3 for i in range(16)], 1)
+    px = pal[np.arange(n)[:, None], bits]
+    return px.reshape(h // 4, w // 4, 4, 4, 3).transpose(0, 2, 1, 3, 4).reshape(h, w, 3)
+
+
+def read_blp(path):
+    """The largest picture of a BLP as h x w x 3 uint8, read exactly when it is DXT1."""
+    data = open(path, 'rb').read()
+    magic, typ, enc, alpha_depth, alpha_enc, has_mips, w, h = struct.unpack('<4sIBBBBII', data[:20])
+    if magic == b'BLP2' and enc == 2 and alpha_depth == 0 and w % 4 == 0 and h % 4 == 0:
+        at, size = struct.unpack('<I', data[20:24])[0], struct.unpack('<I', data[84:88])[0]
+        return np.clip(np.rint(decode_bc1(data[at:at + size], w, h)), 0, 255).astype(np.uint8)
+    return np.asarray(Image.open(path).convert('RGB'))
+
+
+def _box(e, r):
+    k = 2 * r + 1
+    p = np.pad(e, ((r, r), (r, r), (0, 0)), mode='edge')
+    s = np.cumsum(np.cumsum(np.pad(p, ((1, 0), (1, 0), (0, 0))), 0), 1)
+    return (s[k:, k:] - s[:-k, k:] - s[k:, :-k] + s[:-k, :-k]) / (k * k)
+
+
+def compress_bc1_true(rgb):
+    """DXT1 that keeps the colours. The compressor rounds dark, even areas down (measured on a
+    painted sea: 3 to 7 of 255 lost in red, 2.5 in blue). So: compress, see what was lost over
+    each small neighbourhood, add that to the picture, compress again; the closest try is kept.
+    rgb: h x w x 3, sides a multiple of 4."""
+    want = rgb.astype(np.float32)
+    h, w = want.shape[:2]
+    alpha = np.full((h, w), 255, np.uint8)
+
+    def pack(a):
+        return etcpak.compress_bc1(np.dstack([np.clip(np.rint(a), 0, 255).astype(np.uint8), alpha]).tobytes(), w, h)
+    cur, best = want, None
+    for _ in range(3):
+        data = pack(cur)
+        seen = decode_bc1(data, w, h)
+        off = float(((seen - want) ** 2).mean())
+        if best is None or off < best[0]:
+            best = (off, data)
+        cur = cur + _box(want - seen, min(6, max(1, w // 64)))
+    return best[1]
+
+
 def write_blp(path, rgba, alpha):
     """BLP2, DXT1 (no alpha) or DXT5, full mip chain. rgba: HxWx4 uint8, power-of-two sides."""
     h, w, _ = rgba.shape
@@ -73,7 +133,10 @@ def write_blp(path, rgba, alpha):
         pw, ph = max(4, mw), max(4, mh)
         src = im if (pw, ph) == (mw, mh) else im.resize((pw, ph), Image.BILINEAR)
         raw = src.tobytes()
-        mips.append(etcpak.compress_bc3(raw, pw, ph) if alpha else etcpak.compress_bc1(raw, pw, ph))
+        if alpha:
+            mips.append(etcpak.compress_bc3(raw, pw, ph))
+        else:
+            mips.append(compress_bc1_true(np.asarray(src)[..., :3]) if pw >= 64 else etcpak.compress_bc1(raw, pw, ph))
         if mw == 1 and mh == 1: break
         im = im.resize((max(1, mw // 2), max(1, mh // 2)), Image.LANCZOS)
     head = struct.pack('<4sIBBBBII', b'BLP2', 1, 2, 8 if alpha else 0, 7 if alpha else 0, 1, w, h)

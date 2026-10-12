@@ -201,11 +201,12 @@ SlashCmdList.DENOMAP = function(msg)
             eyes("state", string.format("minimap %s, zoom %d of %d, maps %s", ns.MinimapStatus(), Minimap:GetZoom(),
                 Minimap:GetZoomLevels() - 1, (not DenoMapDB or DenoMapDB.maps ~= false) and "on" or "off"))
         end)
-        if word == "sweep" then
+        local sweepTo = tonumber(word:match("^sweep (%d+)$"))      -- "sweep 0": only the zoom levels up to that one
+        if word == "sweep" or sweepTo then
             -- every minimap zoom level, with our tiles and with the game's own: the addon steps
             -- through them by itself and tells the watcher when each picture is ready
             local steps, at, was = {}, 0, DenoMapDB.minimap
-            for level = 0, Minimap:GetZoomLevels() - 1 do
+            for level = 0, math.min(sweepTo or 99, Minimap:GetZoomLevels() - 1) do
                 steps[#steps + 1] = { level, true }
                 steps[#steps + 1] = { level, false }
             end

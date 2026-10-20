@@ -52,6 +52,59 @@ local function mapsOn()
     return not DenoMapDB or DenoMapDB.maps ~= false
 end
 
+-- A file of the pack that is not in memory yet takes a moment to read, and a texture pointed at
+-- it draws nothing until then: the first time a zone was opened or zoomed, its tiles blinked
+-- (his report 2026-10-20; the second time the files were cached and nothing blinked). So the
+-- file is first read by a hidden twin of the texture, and the texture is pointed at it only when
+-- it is in memory. Until then the texture keeps what it shows: the game's art or the last copy.
+local waiting = {}                      -- [texture] = true while its twin is reading
+local poll = CreateFrame("Frame")
+poll:Hide()
+
+local function apply(texture)
+    local job = texture.denoMapJob
+    texture.denoMapJob = nil
+    waiting[texture] = nil
+    -- the texture was given other art meanwhile (a pool hands it to another tile or map): leave it
+    if not job or (texture:GetTextureFileID() or 0) ~= job.from then return end
+    texture:SetTexture(job.file, nil, nil, "LINEAR")
+    texture.denoMapBase, texture.denoMapCopy = job.base, job.copy
+    texture.denoMapShows = texture:GetTextureFileID() or 0
+end
+
+poll:SetScript("OnUpdate", function(self)
+    for texture in pairs(waiting) do
+        if texture.denoMapTwin:IsObjectLoaded() or GetTime() - texture.denoMapJob.since > 5 then apply(texture) end
+    end
+    if not next(waiting) then self:Hide() end
+end)
+
+local function cancel(texture)
+    texture.denoMapJob = nil
+    waiting[texture] = nil
+end
+
+local function loadThenShow(texture, base, copy, id)
+    local file = BASE .. COPY[copy] .. base
+    local job = texture.denoMapJob
+    if job and job.file == file then return end         -- already on its way
+    local twin = texture.denoMapTwin
+    if not twin then
+        -- no size and no alpha on the same frame: it only makes the game read the file
+        local parent = texture:GetParent()
+        twin = parent:CreateTexture(nil, "BACKGROUND")
+        twin:SetSize(1, 1)
+        twin:SetPoint("TOPLEFT", parent, "TOPLEFT")
+        twin:SetAlpha(0)
+        texture.denoMapTwin = twin
+    end
+    twin:SetTexture(file, nil, nil, "LINEAR")
+    texture.denoMapJob = { file = file, base = base, copy = copy, from = id or 0, since = GetTime() }
+    if twin:IsObjectLoaded() then return apply(texture) end   -- in memory already: at once
+    waiting[texture] = true
+    poll:Show()
+end
+
 -- Returns 1 when the texture shows a copy from the pack after this call. Otherwise 0 and the
 -- file id it shows. A texture that was pointed at the pack no longer reports Blizzard's file
 -- id, so what it was is kept on the texture itself.
@@ -63,19 +116,19 @@ local function swap(texture, stretched)
     elseif texture.denoMapShows and (id or 0) == texture.denoMapShows then
         base = texture.denoMapBase                  -- still ours from an earlier pass
     else
+        cancel(texture)
         texture.denoMapShows, texture.denoMapBase, texture.denoMapCopy = nil, nil, nil
         return 0, id
     end
     if not mapsOn() then
+        cancel(texture)
         if base ~= id then texture:SetTexture(base, nil, nil, "TRILINEAR") end
         texture.denoMapShows, texture.denoMapBase, texture.denoMapCopy = nil, nil, nil
         return 0, base
     end
     local copy = copyFor(texture, base, stretched)
     if base == id or copy ~= texture.denoMapCopy then
-        texture:SetTexture(BASE .. COPY[copy] .. base, nil, nil, "LINEAR")
-        texture.denoMapBase, texture.denoMapCopy = base, copy
-        texture.denoMapShows = texture:GetTextureFileID() or 0
+        loadThenShow(texture, base, copy, id)
     end
     return 1, nil, copy
 end

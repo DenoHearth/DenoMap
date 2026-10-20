@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.1 — 2026-10-20
+
+- **No more flicker the first time a zone is opened or zoomed.** Each 4K map file is now read in the background first, and a tile switches to it only once it is in memory; until then the tile keeps the picture it already shows. Before, a tile pointed at a file not yet read drew nothing for a moment, so the map blinked the first time (the second time the files were cached)
+
 ## v1.7.0 — 2026-10-12
 
 Every open point of 1.6.0, each one measured in the game against the game's own minimap.

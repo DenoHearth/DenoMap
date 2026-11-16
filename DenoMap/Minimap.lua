@@ -244,8 +244,11 @@ end
 local function build()
     frame = CreateFrame("Frame", "DenoMapTiles", Minimap)
     frame:SetAllPoints(Minimap)
-    frame:SetFrameStrata("BACKGROUND")
-    frame:SetFrameLevel(100)
+    -- At the minimap's own strata and level: the game draws the player arrow and the blips over
+    -- it still. (Until 1.11.4 this was BACKGROUND, level 100: since the game build of 2026-11-07
+    -- that layer came out see-through while standing still - his report and test, 2026-11-08.)
+    frame:SetFrameStrata(Minimap:GetFrameStrata())
+    frame:SetFrameLevel(Minimap:GetFrameLevel())
     frame:SetClipsChildren(true)
     frame:EnableMouse(false)
     frame:Hide()
@@ -302,6 +305,11 @@ local function outline()
     end
 end
 
+-- Cities under ground that the game counts as outdoors (mounting works there): the game
+-- shows the city's floor plan on the minimap, the terrain tile would show the ground above
+-- (the snowy mountain over Ironforge). Seen in game 2026-11-06 in Ironforge.
+local PLAN_MAPS = { [1455] = true, [1458] = true }   -- Ironforge, Undercity
+
 -- Everything that has to hold before the game's terrain may be switched off.
 local function allowed()
     if not DenoMapDB.minimap then return false end
@@ -309,6 +317,7 @@ local function allowed()
     if IsIndoors() then return false end
     if HybridMinimap and HybridMinimap:IsShown() then return false end
     local map = C_Map.GetBestMapForUnit("player")
+    if map and PLAN_MAPS[map] then return false end
     if not cal.world or map ~= cal.map then calibrate() end
     return cal.world ~= nil
 end
@@ -400,6 +409,8 @@ driver:SetScript("OnEvent", function(self, event, name)
         self:SetScript("OnUpdate", nil)
     else
         if not frame then build() end
+        frame:SetFrameStrata(Minimap:GetFrameStrata())     -- (Edit Mode may have moved the minimap)
+        frame:SetFrameLevel(Minimap:GetFrameLevel())
         outline()
         cal.world = nil                   -- measure again in the new place
         sinceCheck = 1

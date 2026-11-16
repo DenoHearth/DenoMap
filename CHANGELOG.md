@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.11.5 — 2026-11-08
+
+- **Works with OpenMap (seamless world map).** With OpenMap installed, its map pieces get Deno Map's 4K copies too, at every zoom: zone art, discovered areas, and OpenMap's own hand-cleaned world and continent tiles (upscaled 4x into `Maps/OpenMap`). Only OpenMap's public API is used, so OpenMap updates keep working; checked against OpenMap 0.8.2
+- **Smooth map.** The 4K files are swapped in on a small per-frame budget, once per zoom gesture after it settles, and right away for pieces that already have a size; OpenMap's fade-in hides the swap. In-game frame logs show no slow frames left that come from Deno Map
+- **OpenMap's close-zoom blur is switched off while Deno Map's 4K maps are on.** OpenMap 0.8.1+ laid blurred copies over the zone art whenever the map stopped moving, hiding the 4K picture
+- **4K minimap no longer see-through when standing still.** Since the game build of 2026-11-07 the tiles drew nothing at their old frame level; they now sit at the minimap's own strata and level, with the arrow and pins still on top
+- **Zygor:** its map path lines, shift+click waypoint and Foglight layer are kept off (`Zygor.lua`), so they survive Zygor updates
+- Fixed: an error in combat ("attempted to index a table that cannot be indexed with secret keys") when the game set aura or spell icons with secret file ids
+
 ## v1.7.1 — 2026-10-20
 
 - **No more flicker the first time a zone is opened or zoomed.** Each 4K map file is now read in the background first, and a tile switches to it only once it is in memory; until then the tile keeps the picture it already shows. Before, a tile pointed at a file not yet read drew nothing for a moment, so the map blinked the first time (the second time the files were cached)
